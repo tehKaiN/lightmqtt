@@ -1,0 +1,7 @@
+get_filename_component(lightmqtt_CMAKE_DIR "${CMAKE_CURRENT_LIST_FILE}" PATH)
+
+if(NOT TARGET lightmqtt::lightmqtt)
+    include("${lightmqtt_CMAKE_DIR}/lightmqttTargets.cmake")
+endif()
+
+set(lightmqtt_LIBRARIES lightmqtt::lightmqtt)
