@@ -17,6 +17,8 @@ static char id[256];
 static char to[256];
 static char msg[256];
 static char f_msg[256];
+static char user_name[256];
+static char password[256];
 
 static int count = 0;
 static lmqtt_subscribe_t subscribe;
@@ -26,7 +28,7 @@ static char payload[256];
 static char message_topic[256];
 static char message_payload[256];
 static int message_fd = -1;
-static char *tmp_template = "/tmp/pingpong.tmp.XXXXXX";
+static char *tmp_template = "pingpong.tmp.XXXXXX";
 
 int on_connect(void *data, lmqtt_connect_t *connect, int succeeded)
 {
@@ -113,7 +115,7 @@ int on_message(void *data, lmqtt_publish_t *message)
             *fd, (int) message->payload.len);
 
         publish.payload.data = fd;
-        publish.payload.read = &file_read;
+        publish.payload.read = &socket_read;
         if (lseek(*fd, 0, SEEK_SET) == (off_t) -1)
             return 0;
     }
@@ -141,7 +143,7 @@ lmqtt_allocate_result_t on_message_allocate_payload(void *data,
         char filename[256];
         int fd;
         strcpy(filename, tmp_template);
-        fd = mkostemp(filename, O_NONBLOCK);
+        fd = make_temporary_file(filename);
         if (fd == -1)
             return LMQTT_ALLOCATE_ERROR;
         message_fd = fd;
@@ -180,8 +182,8 @@ void run(const char *address, unsigned short port)
     memset(&buffers, 0, sizeof(buffers));
 
     client_callbacks.data = &socket_fd;
-    client_callbacks.read = &file_read;
-    client_callbacks.write = &file_write;
+    client_callbacks.read = &socket_read;
+    client_callbacks.write = &socket_write;
     client_callbacks.get_time = &get_time;
 
     message_callbacks.on_publish = &on_message;
@@ -210,6 +212,10 @@ void run(const char *address, unsigned short port)
     connect_data.clean_session = 1;
     connect_data.client_id.buf = id;
     connect_data.client_id.len = strlen(id);
+    connect_data.password.buf = password;
+	  connect_data.password.len = strlen(password);
+    connect_data.user_name.buf = user_name;
+    connect_data.user_name.len = strlen(user_name);
 
     lmqtt_client_connect(&client, &connect_data);
 
@@ -274,6 +280,8 @@ int main(int argc, const char *argv[])
     int opt_error = 0;
 
     strcpy(id, "");
+		strcpy(user_name, "");
+		strcpy(password, "");
     strcpy(to, "");
     strcpy(msg, "");
     strcpy(f_msg, "");
@@ -309,6 +317,16 @@ int main(int argc, const char *argv[])
             i += 2;
             continue;
         }
+        if (HAS_OPT_ARG("-P")) {
+            strcpy(password, argv[i + 1]);
+            i += 2;
+            continue;
+        }
+        if (HAS_OPT_ARG("-u")) {
+            strcpy(user_name, argv[i + 1]);
+            i += 2;
+            continue;
+        }
         opt_error = 1;
         break;
     }
@@ -317,18 +335,22 @@ int main(int argc, const char *argv[])
             strlen(msg) && strlen(f_msg)) {
         fprintf(stderr, "Syntax error.\n\n");
         fprintf(stderr, "Usage: %s -i <ID> -t <TO> -h <HOST> [-p <PORT>] "
-            "[-m <MSG> | -f <FILE>]\n", argv[0]);
+            "[-m <MSG> | -f <FILE>] [-u USER [-p PASS]]\n", argv[0]);
         fprintf(stderr, "    -h HOST    Broker's IP address\n");
         fprintf(stderr, "    -p PORT    Broker's port (default: 1883)\n");
         fprintf(stderr, "    -i ID      This client's id\n");
-        fprintf(stderr, "    -t TO      Other client's id\n");
+        fprintf(stderr, "    -t TO      Other client's id (topic for -s)\n");
         fprintf(stderr, "    -m MSG     Message to send to other client "
             "(default: <empty>)\n");
         fprintf(stderr, "    -f FILE    File to send to other client "
             "(default: <empty>)\n");
+        fprintf(stderr, "    -u USER    User name (default: <empty>)\n");
+        fprintf(stderr, "    -P PASS    Password (default: <empty>)\n");
         return 1;
     }
 
+    socket_init();
     run(address, port);
+    socket_cleanup();
     return 0;
 }
