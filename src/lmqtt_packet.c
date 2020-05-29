@@ -74,8 +74,8 @@ LMQTT_STATIC unsigned char get_next_ws_xor(lmqtt_tx_buffer_t *tx_buffer)
     return next_byte;
 }
 
-LMQTT_STATIC size_t encode_ws_header(lmqtt_encode_buffer_t *encode_buffer,
-    unsigned char *buf, size_t buf_len, size_t payload_len)
+LMQTT_STATIC lmqtt_encode_result_t encode_ws_header(lmqtt_encode_buffer_t *encode_buffer,
+    unsigned char *buf, size_t buf_len, size_t payload_len, size_t *bytes_written)
 {
     /* Get tx buffer from encode buffer */
 	lmqtt_tx_buffer_t *tx_buffer = (lmqtt_tx_buffer_t *)(
@@ -85,7 +85,10 @@ LMQTT_STATIC size_t encode_ws_header(lmqtt_encode_buffer_t *encode_buffer,
         return 0;
     }
 
-    assert(buf_len >= 10);
+    if(buf_len < 10) {
+        *bytes_written = 0;
+        return LMQTT_ENCODE_CONTINUE;
+    }
 
     /* Set websocket header - final & binary frame, set masked bit */
     size_t pos = 0;
@@ -123,7 +126,8 @@ LMQTT_STATIC size_t encode_ws_header(lmqtt_encode_buffer_t *encode_buffer,
     buf[pos++] = tx_buffer->internal.ws_xor[2];
     buf[pos++] = tx_buffer->internal.ws_xor[3];
 
-    return pos;
+    *bytes_written = pos;
+    return LMQTT_ENCODE_FINISHED;
 }
 
 /******************************************************************************
@@ -676,9 +680,8 @@ LMQTT_STATIC lmqtt_encode_result_t connect_encode_ws_header(
     lmqtt_connect_t *connect = value->value;
     size_t ws_payload_len = calc_mqtt_packet_len(
         connect_calc_remaining_length(connect));
-    *bytes_written = encode_ws_header(encode_buffer, buf, buf_len, ws_payload_len);
-
-    return LMQTT_ENCODE_FINISHED;
+    return encode_ws_header(encode_buffer, buf, buf_len, ws_payload_len,
+        bytes_written);
 }
 
 LMQTT_STATIC void connect_build_fixed_header(lmqtt_store_value_t *value,
@@ -845,9 +848,8 @@ LMQTT_STATIC lmqtt_encode_result_t subscribe_encode_ws_header_subscribe(
     lmqtt_subscribe_t *subscribe = value->value;
     size_t payload_len = subscribe_calc_remaining_length(subscribe, 1);
     size_t ws_payload_len = calc_mqtt_packet_len(payload_len);
-    *bytes_written = encode_ws_header(encode_buffer, buf, buf_len, ws_payload_len);
-
-    return LMQTT_ENCODE_FINISHED;
+    return encode_ws_header(encode_buffer, buf, buf_len, ws_payload_len,
+        bytes_written);
 }
 
 LMQTT_STATIC void subscribe_build_header_subscribe(
@@ -875,9 +877,8 @@ LMQTT_STATIC lmqtt_encode_result_t subscribe_encode_ws_header_unsubscribe(
     lmqtt_subscribe_t *subscribe = value->value;
     size_t payload_len = subscribe_calc_remaining_length(subscribe, 0);
     size_t ws_payload_len = calc_mqtt_packet_len(payload_len);
-    *bytes_written = encode_ws_header(encode_buffer, buf, buf_len, ws_payload_len);
-
-    return LMQTT_ENCODE_FINISHED;
+    return encode_ws_header(encode_buffer, buf, buf_len, ws_payload_len,
+        bytes_written);
 }
 
 LMQTT_STATIC void subscribe_build_header_unsubscribe(
@@ -968,9 +969,8 @@ LMQTT_STATIC lmqtt_encode_result_t publish_encode_ws_header(
     lmqtt_publish_t *publish = value->value;
     size_t payload_len = publish_calc_remaining_length(publish);
     size_t ws_payload_len = calc_mqtt_packet_len(payload_len);
-    *bytes_written = encode_ws_header(encode_buffer, buf, buf_len, ws_payload_len);
-
-    return LMQTT_ENCODE_FINISHED;
+    return encode_ws_header(encode_buffer, buf, buf_len, ws_payload_len,
+        bytes_written);
 }
 
 LMQTT_STATIC void publish_build_fixed_header(lmqtt_store_value_t *value,
@@ -1061,9 +1061,8 @@ LMQTT_STATIC lmqtt_encode_result_t puback_encode_ws_header(
     size_t offset, unsigned char *buf, size_t buf_len, size_t *bytes_written)
 {
     size_t ws_payload_len = calc_mqtt_packet_len(LMQTT_PACKET_ID_SIZE);
-    *bytes_written = encode_ws_header(encode_buffer, buf, buf_len, ws_payload_len);
-
-    return LMQTT_ENCODE_FINISHED;
+    return encode_ws_header(encode_buffer, buf, buf_len, ws_payload_len,
+        bytes_written);
 }
 
 LMQTT_STATIC void puback_build(lmqtt_store_value_t *value,
@@ -1090,9 +1089,8 @@ LMQTT_STATIC lmqtt_encode_result_t pubrec_encode_ws_header(
     size_t offset, unsigned char *buf, size_t buf_len, size_t *bytes_written)
 {
     size_t ws_payload_len = calc_mqtt_packet_len(LMQTT_PACKET_ID_SIZE);
-    *bytes_written = encode_ws_header(encode_buffer, buf, buf_len, ws_payload_len);
-
-    return LMQTT_ENCODE_FINISHED;
+    return encode_ws_header(encode_buffer, buf, buf_len, ws_payload_len,
+        bytes_written);
 }
 
 LMQTT_STATIC void pubrec_build(lmqtt_store_value_t *value,
@@ -1119,9 +1117,8 @@ LMQTT_STATIC lmqtt_encode_result_t pubrel_encode_ws_header(
     size_t offset, unsigned char *buf, size_t buf_len, size_t *bytes_written)
 {
     size_t ws_payload_len = calc_mqtt_packet_len(LMQTT_PACKET_ID_SIZE);
-    *bytes_written = encode_ws_header(encode_buffer, buf, buf_len, ws_payload_len);
-
-    return LMQTT_ENCODE_FINISHED;
+    return encode_ws_header(encode_buffer, buf, buf_len, ws_payload_len,
+        bytes_written);
 }
 
 LMQTT_STATIC void pubrel_build(lmqtt_store_value_t *value,
@@ -1148,9 +1145,8 @@ LMQTT_STATIC lmqtt_encode_result_t pubcomp_encode_ws_header(
     size_t offset, unsigned char *buf, size_t buf_len, size_t *bytes_written)
 {
     size_t ws_payload_len = calc_mqtt_packet_len(LMQTT_PACKET_ID_SIZE);
-    *bytes_written = encode_ws_header(encode_buffer, buf, buf_len, ws_payload_len);
-
-    return LMQTT_ENCODE_FINISHED;
+    return encode_ws_header(encode_buffer, buf, buf_len, ws_payload_len,
+        bytes_written);
 }
 
 LMQTT_STATIC void pubcomp_build(lmqtt_store_value_t *value,
@@ -1177,9 +1173,8 @@ LMQTT_STATIC lmqtt_encode_result_t pingreq_encode_ws_header(
     size_t offset, unsigned char *buf, size_t buf_len, size_t *bytes_written)
 {
     size_t ws_payload_len = calc_mqtt_packet_len(2);
-    *bytes_written = encode_ws_header(encode_buffer, buf, buf_len, ws_payload_len);
-
-    return LMQTT_ENCODE_FINISHED;
+    return encode_ws_header(encode_buffer, buf, buf_len, ws_payload_len,
+        bytes_written);
 }
 
 LMQTT_STATIC void pingreq_build(lmqtt_store_value_t *value,
@@ -1209,9 +1204,8 @@ LMQTT_STATIC lmqtt_encode_result_t disconnect_encode_ws_header(
     size_t offset, unsigned char *buf, size_t buf_len, size_t *bytes_written)
 {
     size_t ws_payload_len = calc_mqtt_packet_len(2);
-    *bytes_written = encode_ws_header(encode_buffer, buf, buf_len, ws_payload_len);
-
-    return LMQTT_ENCODE_FINISHED;
+    return encode_ws_header(encode_buffer, buf, buf_len, ws_payload_len,
+        bytes_written);
 }
 
 LMQTT_STATIC void disconnect_build(lmqtt_store_value_t *value,
