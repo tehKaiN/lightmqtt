@@ -86,7 +86,17 @@ typedef enum {
     /* UNSUBACK callback returned 0 */
     LMQTT_ERROR_CALLBACK_UNSUBACK,
     /* PUBLISH callback returned 0 */
-    LMQTT_ERROR_CALLBACK_PUBLISH
+    LMQTT_ERROR_CALLBACK_PUBLISH,
+    /* Websocket header indicates fragmented packet -unimplemented */
+    LMQTT_ERROR_DECODE_WS_HEADER_NO_FINAL_BIT,
+    /* Websocket header has invalid (reserved) type*/
+    LMQTT_ERROR_DECODE_WS_HEADER_INVALID_TYPE,
+    /* Received server frame has 'masked' bit set which shouldn't occur */
+    LMQTT_ERROR_DECODE_WS_HEADER_SERVER_MASKED,
+    /* Received server frame has too big size set - bigger than size_t */
+    LMQTT_ERROR_DECODE_WS_HEADER_SIZE_TOO_BIG,
+    /* Unsupported websocket frame type*/
+    LMQTT_ERROR_WS_UNSUPPORTED_FRAME_TYPE
 } lmqtt_error_t;
 
 typedef lmqtt_io_result_t (*lmqtt_io_callback_t)(void *, void *, size_t,

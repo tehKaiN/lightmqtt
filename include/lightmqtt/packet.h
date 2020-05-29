@@ -101,6 +101,16 @@ typedef struct _lmqtt_fixed_header_t {
     } internal;
 } lmqtt_fixed_header_t;
 
+typedef struct _lmqtt_websocket_header_t {
+    unsigned char type;
+    size_t packet_size;
+    struct {
+        size_t expected_size;
+        size_t bytes_read;
+        lmqtt_error_t error;
+    } internal;
+} lmqtt_websocket_header_t;
+
 typedef struct _lmqtt_subscription_t {
     lmqtt_qos_t requested_qos;
     lmqtt_string_t topic;
@@ -203,6 +213,8 @@ typedef struct _lmqtt_rx_buffer_t {
     struct {
         lmqtt_fixed_header_t header;
         int header_finished;
+        lmqtt_websocket_header_t ws_header;
+        int ws_header_finished;
         struct _lmqtt_rx_buffer_decoder_t const *decoder;
         long remain_buf_pos;
         unsigned short topic_len;
