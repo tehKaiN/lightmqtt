@@ -62,10 +62,23 @@ LMQTT_STATIC int kind_expects_response(lmqtt_kind_t kind)
         kind != LMQTT_KIND_DISCONNECT;
 }
 
-LMQTT_STATIC size_t encode_ws_header(unsigned char *buf, size_t buf_len,
-    size_t payload_len)
+LMQTT_STATIC unsigned char get_next_ws_xor(lmqtt_tx_buffer_t *tx_buffer)
 {
-    if(!DIRTY_WEBSOCKET) {
+    unsigned char *xor_table = tx_buffer->internal.ws_xor;
+    unsigned char next_byte = xor_table[tx_buffer->internal.ws_xor_pos];
+    if(++tx_buffer->internal.ws_xor_pos >= 4)
+        tx_buffer->internal.ws_xor_pos = 0;
+    return next_byte;
+}
+
+LMQTT_STATIC size_t encode_ws_header(lmqtt_encode_buffer_t *encode_buffer,
+    unsigned char *buf, size_t buf_len, size_t payload_len)
+{
+    /* Get tx buffer from encode buffer */
+	lmqtt_tx_buffer_t *tx_buffer = (lmqtt_tx_buffer_t *)(
+        (unsigned char*)encode_buffer -
+        offsetof(lmqtt_tx_buffer_t, internal.buffer));
+    if(!tx_buffer->websocket_enabled) {
         return 0;
     }
 
@@ -100,11 +113,12 @@ LMQTT_STATIC size_t encode_ws_header(unsigned char *buf, size_t buf_len,
     }
 
     /* Append XOR cipher */
-    /* TODO: proper cipher */
-    buf[pos++] = 0;
-    buf[pos++] = 0;
-    buf[pos++] = 0;
-    buf[pos++] = 0;
+    if(tx_buffer->get_ws_xor != NULL)
+        tx_buffer->get_ws_xor(tx_buffer->internal.ws_xor);
+    buf[pos++] = tx_buffer->internal.ws_xor[0];
+    buf[pos++] = tx_buffer->internal.ws_xor[1];
+    buf[pos++] = tx_buffer->internal.ws_xor[2];
+    buf[pos++] = tx_buffer->internal.ws_xor[3];
 
     return pos;
 }
@@ -195,6 +209,15 @@ LMQTT_STATIC lmqtt_encode_result_t encode_buffer_encode(
 
     memcpy(buf, &encode_buffer->buf[offset], cnt);
     *bytes_written = cnt;
+
+    /* Get tx buffer from encode buffer */
+	lmqtt_tx_buffer_t *tx_buffer = (lmqtt_tx_buffer_t *)(
+        (unsigned char*)encode_buffer -
+        offsetof(lmqtt_tx_buffer_t, internal.buffer));
+    if(tx_buffer->websocket_enabled)
+        for(int i = 0; i < cnt; ++i) {
+            buf[i] ^= get_next_ws_xor(tx_buffer);
+        }
 
     if (result == LMQTT_ENCODE_FINISHED)
         memset(encode_buffer, 0, sizeof(*encode_buffer));
@@ -289,6 +312,11 @@ LMQTT_STATIC lmqtt_encode_result_t string_encode(lmqtt_string_t *str,
     lmqtt_string_result_t read_res;
     long remaining;
 
+    /* Get tx buffer from encode buffer */
+	lmqtt_tx_buffer_t *tx_buffer = (lmqtt_tx_buffer_t *)(
+        (unsigned char*)encode_buffer -
+        offsetof(lmqtt_tx_buffer_t, internal.buffer));
+
     *bytes_written = 0;
     encode_buffer->blocking_str = NULL;
 
@@ -304,7 +332,10 @@ LMQTT_STATIC lmqtt_encode_result_t string_encode(lmqtt_string_t *str,
     if (encode_len) {
         for (i = 0; i < LMQTT_STRING_LEN_SIZE; i++) {
             if (offset <= i) {
-                buf[pos++] = STRING_LEN_BYTE(len, LMQTT_STRING_LEN_SIZE - i - 1);
+                buf[pos] = STRING_LEN_BYTE(len, LMQTT_STRING_LEN_SIZE - i - 1);
+                if(tx_buffer->websocket_enabled)
+                    buf[pos] ^= get_next_ws_xor(tx_buffer);
+                ++pos;
                 *bytes_written += 1;
                 if (pos >= buf_len) {
                     return pos >= LMQTT_STRING_LEN_SIZE && len == 0 ?
@@ -328,6 +359,10 @@ LMQTT_STATIC lmqtt_encode_result_t string_encode(lmqtt_string_t *str,
         &encode_buffer->os_error);
     *bytes_written += read_cnt;
     assert((long) read_cnt <= remaining);
+
+    if(tx_buffer->websocket_enabled)
+        for(i = 0; i < read_cnt; ++i)
+            buf[pos + i] ^= get_next_ws_xor(tx_buffer);
 
     if (read_res == LMQTT_STRING_WOULD_BLOCK) {
         encode_buffer->blocking_str = str;
@@ -534,7 +569,7 @@ LMQTT_STATIC lmqtt_encode_result_t connect_encode_ws_header(
     lmqtt_connect_t *connect = value->value;
     size_t ws_payload_len = calc_mqtt_packet_len(
         connect_calc_remaining_length(connect));
-    *bytes_written = encode_ws_header(buf, buf_len, ws_payload_len);
+    *bytes_written = encode_ws_header(encode_buffer, buf, buf_len, ws_payload_len);
 
     return LMQTT_ENCODE_FINISHED;
 }
@@ -703,7 +738,7 @@ LMQTT_STATIC lmqtt_encode_result_t subscribe_encode_ws_header_subscribe(
     lmqtt_subscribe_t *subscribe = value->value;
     size_t payload_len = subscribe_calc_remaining_length(subscribe, 1);
     size_t ws_payload_len = calc_mqtt_packet_len(payload_len);
-    *bytes_written = encode_ws_header(buf, buf_len, ws_payload_len);
+    *bytes_written = encode_ws_header(encode_buffer, buf, buf_len, ws_payload_len);
 
     return LMQTT_ENCODE_FINISHED;
 }
@@ -733,7 +768,7 @@ LMQTT_STATIC lmqtt_encode_result_t subscribe_encode_ws_header_unsubscribe(
     lmqtt_subscribe_t *subscribe = value->value;
     size_t payload_len = subscribe_calc_remaining_length(subscribe, 0);
     size_t ws_payload_len = calc_mqtt_packet_len(payload_len);
-    *bytes_written = encode_ws_header(buf, buf_len, ws_payload_len);
+    *bytes_written = encode_ws_header(encode_buffer, buf, buf_len, ws_payload_len);
 
     return LMQTT_ENCODE_FINISHED;
 }
@@ -826,7 +861,7 @@ LMQTT_STATIC lmqtt_encode_result_t publish_encode_ws_header(
     lmqtt_publish_t *publish = value->value;
     size_t payload_len = publish_calc_remaining_length(publish);
     size_t ws_payload_len = calc_mqtt_packet_len(payload_len);
-    *bytes_written = encode_ws_header(buf, buf_len, ws_payload_len);
+    *bytes_written = encode_ws_header(encode_buffer, buf, buf_len, ws_payload_len);
 
     return LMQTT_ENCODE_FINISHED;
 }
@@ -919,7 +954,7 @@ LMQTT_STATIC lmqtt_encode_result_t puback_encode_ws_header(
     size_t offset, unsigned char *buf, size_t buf_len, size_t *bytes_written)
 {
     size_t ws_payload_len = calc_mqtt_packet_len(LMQTT_PACKET_ID_SIZE);
-    *bytes_written = encode_ws_header(buf, buf_len, ws_payload_len);
+    *bytes_written = encode_ws_header(encode_buffer, buf, buf_len, ws_payload_len);
 
     return LMQTT_ENCODE_FINISHED;
 }
@@ -948,7 +983,7 @@ LMQTT_STATIC lmqtt_encode_result_t pubrec_encode_ws_header(
     size_t offset, unsigned char *buf, size_t buf_len, size_t *bytes_written)
 {
     size_t ws_payload_len = calc_mqtt_packet_len(LMQTT_PACKET_ID_SIZE);
-    *bytes_written = encode_ws_header(buf, buf_len, ws_payload_len);
+    *bytes_written = encode_ws_header(encode_buffer, buf, buf_len, ws_payload_len);
 
     return LMQTT_ENCODE_FINISHED;
 }
@@ -977,7 +1012,7 @@ LMQTT_STATIC lmqtt_encode_result_t pubrel_encode_ws_header(
     size_t offset, unsigned char *buf, size_t buf_len, size_t *bytes_written)
 {
     size_t ws_payload_len = calc_mqtt_packet_len(LMQTT_PACKET_ID_SIZE);
-    *bytes_written = encode_ws_header(buf, buf_len, ws_payload_len);
+    *bytes_written = encode_ws_header(encode_buffer, buf, buf_len, ws_payload_len);
 
     return LMQTT_ENCODE_FINISHED;
 }
@@ -1006,7 +1041,7 @@ LMQTT_STATIC lmqtt_encode_result_t pubcomp_encode_ws_header(
     size_t offset, unsigned char *buf, size_t buf_len, size_t *bytes_written)
 {
     size_t ws_payload_len = calc_mqtt_packet_len(LMQTT_PACKET_ID_SIZE);
-    *bytes_written = encode_ws_header(buf, buf_len, ws_payload_len);
+    *bytes_written = encode_ws_header(encode_buffer, buf, buf_len, ws_payload_len);
 
     return LMQTT_ENCODE_FINISHED;
 }
@@ -1035,7 +1070,7 @@ LMQTT_STATIC lmqtt_encode_result_t pingreq_encode_ws_header(
     size_t offset, unsigned char *buf, size_t buf_len, size_t *bytes_written)
 {
     size_t ws_payload_len = calc_mqtt_packet_len(2);
-    *bytes_written = encode_ws_header(buf, buf_len, ws_payload_len);
+    *bytes_written = encode_ws_header(encode_buffer, buf, buf_len, ws_payload_len);
 
     return LMQTT_ENCODE_FINISHED;
 }
@@ -1067,7 +1102,7 @@ LMQTT_STATIC lmqtt_encode_result_t disconnect_encode_ws_header(
     size_t offset, unsigned char *buf, size_t buf_len, size_t *bytes_written)
 {
     size_t ws_payload_len = calc_mqtt_packet_len(2);
-    *bytes_written = encode_ws_header(buf, buf_len, ws_payload_len);
+    *bytes_written = encode_ws_header(encode_buffer, buf, buf_len, ws_payload_len);
 
     return LMQTT_ENCODE_FINISHED;
 }
@@ -1947,7 +1982,7 @@ static lmqtt_io_result_t lmqtt_rx_buffer_decode_impl(lmqtt_rx_buffer_t *state,
         return LMQTT_IO_ERROR;
 
     while (i < buf_len) {
-        if (DIRTY_WEBSOCKET && !state->internal.ws_header_finished) {
+        if (state->websocket_enabled && !state->internal.ws_header_finished) {
             lmqtt_error_t error;
             int res = websocket_header_decode(&state->internal.ws_header,
                 buf[i], &error);
@@ -1963,7 +1998,7 @@ static lmqtt_io_result_t lmqtt_rx_buffer_decode_impl(lmqtt_rx_buffer_t *state,
             /* Now move further */
             state->internal.ws_header_finished = 1;
         } else if(
-            DIRTY_WEBSOCKET && state->internal.ws_header_finished &&
+            state->websocket_enabled && state->internal.ws_header_finished &&
             state->internal.ws_header.type != 0x2
         ) {
             /* Handle special websocket frames */

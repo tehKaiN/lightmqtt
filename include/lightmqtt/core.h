@@ -102,6 +102,9 @@ typedef enum {
 typedef lmqtt_io_result_t (*lmqtt_io_callback_t)(void *, void *, size_t,
     size_t *, int *);
 
+/* write randomly generated 4 bytes for XORing websocket packets */
+typedef void (*lmqtt_get_websocket_xor_cipher_t)(unsigned char *destination);
+
 #ifdef  __cplusplus
 }
 #endif

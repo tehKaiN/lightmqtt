@@ -45,6 +45,7 @@ typedef struct _lmqtt_client_callbacks_t {
     lmqtt_io_callback_t read;
     lmqtt_io_callback_t write;
     lmqtt_get_time_t get_time;
+		lmqtt_get_websocket_xor_cipher_t get_ws_xor;
 } lmqtt_client_callbacks_t;
 
 typedef struct _lmqtt_client_buffers_t {

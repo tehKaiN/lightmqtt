@@ -120,6 +120,7 @@ typedef struct _lmqtt_subscription_t {
 typedef struct _lmqtt_connect_t {
     unsigned short keep_alive;
     unsigned char clean_session;
+    unsigned char websocket_enabled;
     lmqtt_qos_t will_qos;
     unsigned char will_retain;
     lmqtt_string_t client_id;
@@ -154,10 +155,14 @@ typedef struct _lmqtt_tx_buffer_t {
     lmqtt_store_t *store;
 
     int closed;
+		int websocket_enabled;
+		lmqtt_get_websocket_xor_cipher_t get_ws_xor;
 
     struct {
-        int pos;
-        size_t offset;
+        int pos; /* finder position (encoding step) */
+        size_t offset; /* bytes written so far in current encoding step */
+        unsigned char ws_xor[4]; /* xor table for websocket encoding */
+        int ws_xor_pos; /* current position in websocket xor table */
         lmqtt_encode_buffer_t buffer;
         lmqtt_error_t error;
         int os_error;
@@ -209,6 +214,7 @@ typedef struct _lmqtt_rx_buffer_t {
     lmqtt_message_callbacks_t *message_callbacks;
 
     lmqtt_id_set_t id_set;
+		int websocket_enabled;
 
     struct {
         lmqtt_fixed_header_t header;
