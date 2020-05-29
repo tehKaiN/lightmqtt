@@ -576,7 +576,7 @@ LMQTT_STATIC lmqtt_encode_result_t connect_encode_ws_hanshake_host(
 {
     static const char host[] = "Host: ";
     static const char crlf[] = "\r\n";
-    lmqtt_connect_t *connect = (lmqtt_connect_t *)value;
+    lmqtt_connect_t *connect = (lmqtt_connect_t *)value->value;
     assert(buf_len >= strlen(host) + connect->websocket_addr.len + strlen(crlf));
     strcpy((char*)buf, host);
     strcat((char*)buf, connect->websocket_addr.buf);
@@ -607,7 +607,7 @@ LMQTT_STATIC lmqtt_encode_result_t connect_encode_ws_hanshake_origin(
 {
     static const char origin[] = "Origin: http://";
     static const char crlf[] = "\r\n";
-    lmqtt_connect_t *connect = (lmqtt_connect_t *)value;
+    lmqtt_connect_t *connect = (lmqtt_connect_t *)value->value;
     assert(buf_len >= strlen(origin) + connect->websocket_addr.len + strlen(crlf));
     strcpy((char*)buf, origin);
     strcat((char*)buf, connect->websocket_addr.buf);
@@ -622,7 +622,7 @@ LMQTT_STATIC lmqtt_encode_result_t connect_encode_ws_hanshake_key(
 {
     static const char pre[] = "Sec-WebSocket-Key: ";
     static const char crlf[] = "\r\n";
-    lmqtt_connect_t *connect = (lmqtt_connect_t *)value;
+    lmqtt_connect_t *connect = (lmqtt_connect_t *)value->value;
     assert(buf_len >= strlen(pre) + connect->websocket_key.len + strlen(crlf));
     strcpy((char*)buf, pre);
     strcat((char*)buf, connect->websocket_key.buf);
@@ -2147,10 +2147,8 @@ static lmqtt_io_result_t lmqtt_rx_buffer_decode_impl(lmqtt_rx_buffer_t *state,
 
             /* Now move further */
             state->internal.ws_header_finished = 1;
-        } else if(
-            state->websocket_enabled && state->internal.ws_header_finished &&
-            state->internal.ws_header.type != 0x2
-        ) {
+        } else if (state->websocket_enabled && state->internal.ws_header_finished &&
+                state->internal.ws_header.type != 0x2) {
             /* Handle special websocket frames */
             if(state->internal.ws_header.type == 8) {
                 /* TODO: connection close */
