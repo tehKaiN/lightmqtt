@@ -216,7 +216,7 @@ typedef struct _lmqtt_rx_buffer_t {
     } internal;
 } lmqtt_rx_buffer_t;
 
-int lmqtt_id_set_clear(lmqtt_id_set_t *id_set);
+void lmqtt_id_set_clear(lmqtt_id_set_t *id_set);
 int lmqtt_id_set_contains(lmqtt_id_set_t *id_set, lmqtt_packet_id_t id);
 int lmqtt_id_set_put(lmqtt_id_set_t *id_set, lmqtt_packet_id_t id);
 int lmqtt_id_set_remove(lmqtt_id_set_t *id_set, lmqtt_packet_id_t id);

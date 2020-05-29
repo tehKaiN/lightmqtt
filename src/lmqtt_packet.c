@@ -57,7 +57,7 @@ LMQTT_STATIC int kind_expects_response(lmqtt_kind_t kind)
  * lmqtt_id_list_t PUBLIC functions
  ******************************************************************************/
 
-int lmqtt_id_set_clear(lmqtt_id_set_t *id_set)
+void lmqtt_id_set_clear(lmqtt_id_set_t *id_set)
 {
     id_set->count = 0;
 }
@@ -120,15 +120,18 @@ LMQTT_STATIC lmqtt_encode_result_t encode_buffer_encode(
 
     assert(buf_len >= 0);
 
+    /* encode a packet using a builder */
     if (!encode_buffer->encoded) {
         builder(value, encode_buffer);
         encode_buffer->encoded = 1;
     }
     assert(encode_buffer->buf_len > 0 && offset < encode_buffer->buf_len);
 
+    /* number of bytes to be actually outputed */
     cnt = encode_buffer->buf_len - offset;
     result = LMQTT_ENCODE_FINISHED;
 
+    /* bytes don't fit in output buffer - we'll need to do it in parts */
     if (cnt > buf_len) {
         cnt = buf_len;
         result = LMQTT_ENCODE_CONTINUE;
@@ -351,8 +354,8 @@ LMQTT_STATIC lmqtt_decode_result_t fixed_header_decode(
             result = LMQTT_DECODE_CONTINUE;
         }
     } else {
-        if (header->internal.remain_len_multiplier > 128 * 128 && (b & 128) != 0 ||
-                header->internal.remain_len_multiplier > 1 && b == 0 ||
+        if ((header->internal.remain_len_multiplier > 128 * 128 && (b & 128) != 0) ||
+                (header->internal.remain_len_multiplier > 1 && b == 0) ||
                 header->internal.remain_len_finished) {
             *error = LMQTT_ERROR_DECODE_FIXED_HEADER_INVALID_REMAINING_LENGTH;
             result = LMQTT_DECODE_ERROR;
@@ -394,7 +397,7 @@ LMQTT_STATIC long connect_calc_remaining_length(lmqtt_connect_t *connect)
         string_calc_field_length(&connect->will_message) +
         string_calc_field_length(&connect->user_name) +
         string_calc_field_length(&connect->password);
- }
+}
 
 LMQTT_STATIC void connect_build_fixed_header(lmqtt_store_value_t *value,
     lmqtt_encode_buffer_t *encode_buffer)
@@ -518,7 +521,7 @@ int lmqtt_connect_validate(lmqtt_connect_t *connect)
             !string_validate_field_length(&connect->password))
         return 0;
 
-    if (connect->will_topic.len == 0 ^ connect->will_message.len == 0)
+    if ((connect->will_topic.len == 0) ^ (connect->will_message.len == 0))
         return 0;
 
     if (connect->will_topic.len == 0 && connect->will_retain)
@@ -655,7 +658,6 @@ LMQTT_STATIC long publish_calc_remaining_length(lmqtt_publish_t *publish)
 LMQTT_STATIC void publish_build_fixed_header(lmqtt_store_value_t *value,
     lmqtt_encode_buffer_t *encode_buffer)
 {
-    int i;
     size_t v;
     unsigned char type;
     lmqtt_publish_t *publish = value->value;
@@ -696,7 +698,6 @@ LMQTT_STATIC void publish_build_packet_id(lmqtt_store_value_t *value,
     lmqtt_encode_buffer_t *encode_buffer)
 {
     int i;
-    lmqtt_publish_t *publish = value->value;
 
     for (i = 0; i < LMQTT_PACKET_ID_SIZE; i++)
         encode_buffer->buf[i] = STRING_LEN_BYTE(value->packet_id,
@@ -1051,6 +1052,7 @@ static lmqtt_io_result_t lmqtt_tx_buffer_encode_impl(lmqtt_tx_buffer_t *state,
             lmqtt_encoder_t encoder = finder(state, &value);
 
             if (!encoder) {
+                /* We're done with that packet */
                 if (!kind_expects_response(kind)) {
                     lmqtt_store_drop_current(state->store);
 
@@ -1070,6 +1072,7 @@ static lmqtt_io_result_t lmqtt_tx_buffer_encode_impl(lmqtt_tx_buffer_t *state,
                 break;
             }
 
+            /* Encode packet using current encoder */
             result = encoder(&value, &state->internal.buffer,
                 state->internal.offset, buf + offset, buf_len - offset,
                 &cur_bytes);
@@ -1509,8 +1512,8 @@ LMQTT_STATIC lmqtt_decode_result_t rx_buffer_decode_remaining_without_id(
 
     /* These conditions are guaranteed by either the `decode_bytes` callbacks
        or the minimum length check in `lmqtt_rx_buffer_decode` */
-    assert(res != LMQTT_DECODE_FINISHED && rem_pos < rem_len ||
-        res == LMQTT_DECODE_FINISHED && rem_pos == rem_len);
+    assert((res != LMQTT_DECODE_FINISHED && rem_pos < rem_len) ||
+        (res == LMQTT_DECODE_FINISHED && rem_pos == rem_len));
 
     return res;
 }
@@ -1686,6 +1689,7 @@ static lmqtt_io_result_t lmqtt_rx_buffer_decode_impl(lmqtt_rx_buffer_t *state,
             if (res != LMQTT_DECODE_FINISHED)
                 continue;
 
+            /* MQTT header processing done! Now we know which decoder to use */
             state->internal.header_finished = 1;
             state->internal.decoder =
                 rx_buffer_decoders[state->internal.header.type];

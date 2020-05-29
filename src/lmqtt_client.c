@@ -355,9 +355,11 @@ LMQTT_STATIC int client_do_connect(lmqtt_client_t *client,
 {
     lmqtt_store_value_t value;
 
+    /* Sanity check for connect struct */
     if (!lmqtt_connect_validate(connect))
         return 0;
 
+    /* append first packet to connect store */
     value.packet_id = 0;
     value.value = connect;
     value.callback = (lmqtt_store_entry_callback_t) &client_on_connack;
@@ -367,6 +369,7 @@ LMQTT_STATIC int client_do_connect(lmqtt_client_t *client,
             &value))
         return 0;
 
+    /* Reset buffers and connect vars, prevent from entering do_connect again */
     client_set_state_connecting(client);
     return 1;
 }

@@ -160,7 +160,7 @@ int lmqtt_store_get_timeout(lmqtt_store_t *store, size_t *count, long *secs,
     lmqtt_time_t *tm = &store->last_touch;
     unsigned short when = store->count > 0 ? store->timeout : store->keep_alive;
 
-    if (when == 0 || tm->secs == 0 && tm->nsecs == 0) {
+    if (when == 0 || (tm->secs == 0 && tm->nsecs == 0)) {
         *count = 0;
         *secs = 0;
         *nsecs = 0;
