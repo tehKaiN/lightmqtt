@@ -392,8 +392,8 @@ LMQTT_STATIC int client_do_connect(lmqtt_client_t *client,
     client_set_state_connecting(client);
 
     /* Set websocket var now since it's needed for connection packet */
-    client->rx_state.websocket_enabled = connect->websocket_enabled;
-    client->tx_state.websocket_enabled = connect->websocket_enabled;
+    client->rx_state.ws_enabled = connect->websocket_enabled;
+    client->tx_state.ws_enabled = connect->websocket_enabled;
     return 1;
 }
 
@@ -597,8 +597,8 @@ void lmqtt_client_initialize(lmqtt_client_t *client, lmqtt_client_callbacks_t
     client->rx_state.message_callbacks = &client->message_callbacks;
     client->rx_state.id_set.capacity = buffers->id_set_size;
     client->rx_state.id_set.items = buffers->id_set;
-    client->rx_state.internal.websocket_handshake_buffer = buffers->ws_handshake_buffer;
-    client->rx_state.internal.websocket_handshake_buffer_size = buffers->ws_handshake_buffer_size;
+    client->rx_state.ws_handshake_buffer = buffers->ws_handshake_buffer;
+    client->rx_state.ws_handshake_buffer_size = buffers->ws_handshake_buffer_size;
     client->tx_state.get_ws_xor = callbacks->get_ws_xor;
 
     client_set_state_initial(client);

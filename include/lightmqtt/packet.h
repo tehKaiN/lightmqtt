@@ -159,7 +159,7 @@ typedef struct _lmqtt_tx_buffer_t {
     lmqtt_store_t *store;
 
     int closed;
-		int websocket_enabled;
+		int ws_enabled;
 		lmqtt_get_websocket_xor_cipher_t get_ws_xor;
 
     struct {
@@ -218,14 +218,15 @@ typedef struct _lmqtt_rx_buffer_t {
     lmqtt_message_callbacks_t *message_callbacks;
 
     lmqtt_id_set_t id_set;
-    int websocket_enabled;
+    int ws_enabled;
+    int ws_handshake_finished;
+    char *ws_handshake_buffer;
+    size_t ws_handshake_buffer_size;
 
     struct {
-        int websocket_handshake_finished;
-        int websocket_handshake_pos;
-        int websocket_handshake_was_http_ok;
-        char *websocket_handshake_buffer;
-        size_t websocket_handshake_buffer_size;
+        int ws_handshake_pos;
+        int ws_handshake_was_http_ok;
+        int ws_handshake_was_key_reply;
         lmqtt_fixed_header_t header;
         int header_finished;
         lmqtt_websocket_header_t ws_header;

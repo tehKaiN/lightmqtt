@@ -78,7 +78,7 @@ LMQTT_STATIC size_t encode_ws_header(lmqtt_encode_buffer_t *encode_buffer,
 	lmqtt_tx_buffer_t *tx_buffer = (lmqtt_tx_buffer_t *)(
         (unsigned char*)encode_buffer -
         offsetof(lmqtt_tx_buffer_t, internal.buffer));
-    if(!tx_buffer->websocket_enabled) {
+    if(!tx_buffer->ws_enabled) {
         return 0;
     }
 
@@ -214,7 +214,7 @@ LMQTT_STATIC lmqtt_encode_result_t encode_buffer_encode(
 	lmqtt_tx_buffer_t *tx_buffer = (lmqtt_tx_buffer_t *)(
         (unsigned char*)encode_buffer -
         offsetof(lmqtt_tx_buffer_t, internal.buffer));
-    if(tx_buffer->websocket_enabled)
+    if(tx_buffer->ws_enabled)
         for(int i = 0; i < cnt; ++i) {
             buf[i] ^= get_next_ws_xor(tx_buffer);
         }
@@ -333,7 +333,7 @@ LMQTT_STATIC lmqtt_encode_result_t string_encode(lmqtt_string_t *str,
         for (i = 0; i < LMQTT_STRING_LEN_SIZE; i++) {
             if (offset <= i) {
                 buf[pos] = STRING_LEN_BYTE(len, LMQTT_STRING_LEN_SIZE - i - 1);
-                if(tx_buffer->websocket_enabled)
+                if(tx_buffer->ws_enabled)
                     buf[pos] ^= get_next_ws_xor(tx_buffer);
                 ++pos;
                 *bytes_written += 1;
@@ -360,7 +360,7 @@ LMQTT_STATIC lmqtt_encode_result_t string_encode(lmqtt_string_t *str,
     *bytes_written += read_cnt;
     assert((long) read_cnt <= remaining);
 
-    if(tx_buffer->websocket_enabled)
+    if(tx_buffer->ws_enabled)
         for(i = 0; i < read_cnt; ++i)
             buf[pos + i] ^= get_next_ws_xor(tx_buffer);
 
@@ -2104,35 +2104,51 @@ static lmqtt_io_result_t lmqtt_rx_buffer_decode_impl(lmqtt_rx_buffer_t *state,
         return LMQTT_IO_ERROR;
 
     while (i < buf_len) {
-        if(state->websocket_enabled && !state->internal.websocket_handshake_finished) {
-            state->internal.websocket_handshake_buffer[state->internal.websocket_handshake_pos++] = buf[i];
-            if(state->internal.websocket_handshake_pos == state->internal.websocket_handshake_buffer_size) {
+        if(state->ws_enabled && !state->ws_handshake_finished) {
+            assert(state->ws_handshake_buffer != NULL);
+            state->ws_handshake_buffer[state->internal.ws_handshake_pos++] = buf[i];
+            if(state->internal.ws_handshake_pos >= state->ws_handshake_buffer_size) {
                 return rx_buffer_fail(state, LMQTT_ERROR_WS_HANDSHAKE_LINE_TOO_LONG, 0);
             } else if(buf[i] == '\n') {
+                /* Allow strcmp */
+                state->ws_handshake_buffer[state->internal.ws_handshake_pos] = '\0';
+
+                /* Compare with significant response lines */
                 static const char *key_response_start = "Sec-WebSocket-Accept: ";
-                if(!strcmp("HTTP/1.1 101 Switching Protocols\r\n", state->internal.websocket_handshake_buffer)) {
-                    state->internal.websocket_handshake_was_http_ok = 1;
-                } else if(!strcmp("\r\n", state->internal.websocket_handshake_buffer)) {
-                    state->internal.websocket_handshake_finished = 1;
-                } else if(!memcmp(key_response_start, state->internal.websocket_handshake_buffer,
-                        strlen(key_response_start))) {
-                    int kind;
-                    lmqtt_store_value_t value;
-                    lmqtt_store_peek(state->store, &kind, &value);
-                    assert(kind == LMQTT_KIND_WS_CONNECT);
-                    lmqtt_connect_t *connect = value.value;
-                    char *key_start = state->internal.websocket_handshake_buffer + strlen(key_response_start);
-                    size_t key_len = strlen(key_start) - strlen("\r\n");
-                    if(connect->websocket_key_response.len != key_len ||
-                            memcmp(key_start, connect->websocket_key_response.buf, key_len)) {
-                        return rx_buffer_fail(state, LMQTT_ERROR_WS_HANDSHAKE_INVALID_RESPONSE_KEY, 0);
+                if(!strcmp("HTTP/1.1 101 Switching Protocols\r\n", state->ws_handshake_buffer)) {
+                    state->internal.ws_handshake_was_http_ok = 1;
+                } else if(!strcmp("\r\n", state->ws_handshake_buffer)) {
+                    if(!state->internal.ws_handshake_was_http_ok ||
+                            !state->internal.ws_handshake_was_key_reply) {
+                        return rx_buffer_fail(state,
+                            LMQTT_ERROR_WS_HANDSHAKE_INCOMPLETE_REPLY, 0);
                     }
-                    lmqtt_store_drop_current(state->store);
-                    value.callback(value.callback_data, value.value);
+                    state->ws_handshake_finished = 1;
+                    state->internal.value.callback(
+                        state->internal.value.callback_data,
+                        state->internal.value.value
+                    );
+                } else if(!memcmp(key_response_start, state->ws_handshake_buffer,
+                        strlen(key_response_start))) {
+                    lmqtt_store_pop_marked_by(state->store,
+                        LMQTT_KIND_WS_CONNECT, 0, &state->internal.value);
+                    lmqtt_connect_t *connect = state->internal.value.value;
+                    char *key_start = &state->ws_handshake_buffer[strlen(key_response_start)];
+                    size_t key_len = strlen(key_start) - strlen("\r\n");
+                    if(connect->websocket_key_response.len != key_len || memcmp(
+                            key_start, connect->websocket_key_response.buf,
+                            key_len)) {
+                        return rx_buffer_fail(state,
+                            LMQTT_ERROR_WS_HANDSHAKE_INVALID_RESPONSE_KEY, 0);
+                    }
+                    state->internal.ws_handshake_was_key_reply = 1;
                 }
-                state->internal.websocket_handshake_pos = 0;
+                state->internal.ws_handshake_pos = 0;
             }
-        } else if (state->websocket_enabled && !state->internal.ws_header_finished) {
+            i += 1;
+            *bytes_read += 1;
+            continue;
+        } else if (state->ws_enabled && !state->internal.ws_header_finished) {
             lmqtt_error_t error;
             int res = websocket_header_decode(&state->internal.ws_header,
                 buf[i], &error);
@@ -2147,7 +2163,7 @@ static lmqtt_io_result_t lmqtt_rx_buffer_decode_impl(lmqtt_rx_buffer_t *state,
 
             /* Now move further */
             state->internal.ws_header_finished = 1;
-        } else if (state->websocket_enabled && state->internal.ws_header_finished &&
+        } else if (state->ws_enabled && state->internal.ws_header_finished &&
                 state->internal.ws_header.type != 0x2) {
             /* Handle special websocket frames */
             if(state->internal.ws_header.type == 8) {
