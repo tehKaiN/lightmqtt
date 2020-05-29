@@ -21,7 +21,8 @@ typedef enum {
     LMQTT_KIND_SUBSCRIBE,
     LMQTT_KIND_UNSUBSCRIBE,
     LMQTT_KIND_PINGREQ,
-    LMQTT_KIND_DISCONNECT
+    LMQTT_KIND_DISCONNECT,
+    LMQTT_KIND_WS_CONNECT
 } lmqtt_kind_t;
 
 typedef enum {
@@ -128,6 +129,9 @@ typedef struct _lmqtt_connect_t {
     lmqtt_string_t will_message;
     lmqtt_string_t user_name;
     lmqtt_string_t password;
+    lmqtt_string_t websocket_addr;
+    lmqtt_string_t websocket_key;
+    lmqtt_string_t websocket_key_response;
     struct {
         unsigned char session_present;
     } response;
@@ -214,9 +218,14 @@ typedef struct _lmqtt_rx_buffer_t {
     lmqtt_message_callbacks_t *message_callbacks;
 
     lmqtt_id_set_t id_set;
-		int websocket_enabled;
+    int websocket_enabled;
 
     struct {
+        int websocket_handshake_finished;
+        int websocket_handshake_pos;
+        int websocket_handshake_was_http_ok;
+        char *websocket_handshake_buffer;
+        size_t websocket_handshake_buffer_size;
         lmqtt_fixed_header_t header;
         int header_finished;
         lmqtt_websocket_header_t ws_header;

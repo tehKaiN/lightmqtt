@@ -96,7 +96,9 @@ typedef enum {
     /* Received server frame has too big size set - bigger than size_t */
     LMQTT_ERROR_DECODE_WS_HEADER_SIZE_TOO_BIG,
     /* Unsupported websocket frame type*/
-    LMQTT_ERROR_WS_UNSUPPORTED_FRAME_TYPE
+    LMQTT_ERROR_WS_UNSUPPORTED_FRAME_TYPE,
+		LMQTT_ERROR_WS_HANDSHAKE_INVALID_RESPONSE_KEY,
+		LMQTT_ERROR_WS_HANDSHAKE_LINE_TOO_LONG
 } lmqtt_error_t;
 
 typedef lmqtt_io_result_t (*lmqtt_io_callback_t)(void *, void *, size_t,

@@ -305,6 +305,19 @@ LMQTT_STATIC int client_on_connack(void *data, lmqtt_connect_t *connect)
     return 1;
 }
 
+LMQTT_STATIC int client_on_ws_connack(void *data, lmqtt_connect_t *connect)
+{
+    lmqtt_client_t *client = (lmqtt_client_t *) data;
+
+    /* Append MQTT connect request packet to connect store */
+    lmqtt_store_value_t value;
+    value.packet_id = 0;
+    value.value = connect;
+    value.callback_data = client;
+    value.callback = (lmqtt_store_entry_callback_t) &client_on_connack;
+    return lmqtt_store_append(&client->connect_store, LMQTT_KIND_CONNECT, &value);
+}
+
 LMQTT_STATIC int client_on_suback(void *data, lmqtt_subscribe_t *subscribe)
 {
     lmqtt_client_t *client = (lmqtt_client_t *) data;
@@ -361,11 +374,18 @@ LMQTT_STATIC int client_do_connect(lmqtt_client_t *client,
     /* append first packet to connect store */
     value.packet_id = 0;
     value.value = connect;
-    value.callback = (lmqtt_store_entry_callback_t) &client_on_connack;
+    int kind;
     value.callback_data = client;
+    if(connect->websocket_enabled) {
+        value.callback = (lmqtt_store_entry_callback_t) &client_on_ws_connack;
+        kind = LMQTT_KIND_WS_CONNECT;
+    }
+    else {
+        value.callback = (lmqtt_store_entry_callback_t) &client_on_connack;
+        kind = LMQTT_KIND_CONNECT;
+    }
 
-    if (!lmqtt_store_append(&client->connect_store, LMQTT_KIND_CONNECT,
-            &value))
+    if (!lmqtt_store_append(&client->connect_store, kind, &value))
         return 0;
 
     /* Reset buffers and connect vars, prevent from entering do_connect again */
@@ -577,6 +597,8 @@ void lmqtt_client_initialize(lmqtt_client_t *client, lmqtt_client_callbacks_t
     client->rx_state.message_callbacks = &client->message_callbacks;
     client->rx_state.id_set.capacity = buffers->id_set_size;
     client->rx_state.id_set.items = buffers->id_set;
+    client->rx_state.internal.websocket_handshake_buffer = buffers->ws_handshake_buffer;
+    client->rx_state.internal.websocket_handshake_buffer_size = buffers->ws_handshake_buffer_size;
     client->tx_state.get_ws_xor = callbacks->get_ws_xor;
 
     client_set_state_initial(client);
