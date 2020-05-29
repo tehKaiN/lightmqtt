@@ -1943,6 +1943,8 @@ LMQTT_STATIC lmqtt_decode_result_t rx_buffer_decode_remaining_without_id(
        or the minimum length check in `lmqtt_rx_buffer_decode` */
     assert((res != LMQTT_DECODE_FINISHED && rem_pos < rem_len) ||
         (res == LMQTT_DECODE_FINISHED && rem_pos == rem_len));
+    (void)(rem_len); // Fixes "unused variable" in release builds
+    (void)(rem_pos); // Ditto
 
     return res;
 }
