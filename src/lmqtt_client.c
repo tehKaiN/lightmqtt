@@ -393,6 +393,7 @@ LMQTT_STATIC int client_do_connect(lmqtt_client_t *client,
 
     /* Set websocket var now since it's needed for connection packet */
     client->rx_state.ws_enabled = connect->websocket_enabled;
+    client->rx_state.ws_handshake_finished = 0;
     client->tx_state.ws_enabled = connect->websocket_enabled;
     return 1;
 }
