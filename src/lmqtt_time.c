@@ -9,7 +9,6 @@ int lmqtt_time_get_timeout_to(lmqtt_time_t *tm, lmqtt_get_time_t get_time,
 {
     long tmo_secs, tmo_nsecs;
     long cur_secs, cur_nsecs;
-    long diff;
 
     if (when == 0) {
         *nsecs = 0;

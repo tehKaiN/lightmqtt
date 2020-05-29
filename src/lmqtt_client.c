@@ -114,7 +114,6 @@ LMQTT_STATIC void client_cleanup_stores(lmqtt_client_t *client,
 {
     int i = 0;
     int kind;
-    lmqtt_store_value_t value;
 
     if (keep_session) {
         while (lmqtt_store_get_at(&client->main_store, i, &kind, NULL)) {
