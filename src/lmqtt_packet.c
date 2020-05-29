@@ -48,11 +48,14 @@ LMQTT_STATIC size_t encode_remaining_length(long len, unsigned char *buf)
 
 LMQTT_STATIC size_t calc_mqtt_packet_len(long payload_len)
 {
-    /* calculate 'remaining length' field len */
-    size_t remaining_len = (payload_len / 128) + 1;
-
     /* header's first byte + 'remaining length' field len + payload len */
-    return 1 + remaining_len + payload_len;
+    size_t packet_len = 1 + 1 + payload_len;
+
+    /* increment for each 'remaining length' field's additional byte */
+    while(payload_len /= 128)
+        ++packet_len;
+
+    return packet_len;
 }
 
 LMQTT_STATIC int kind_expects_response(lmqtt_kind_t kind)
