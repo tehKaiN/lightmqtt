@@ -2167,9 +2167,9 @@ static lmqtt_io_result_t lmqtt_rx_buffer_decode_impl(lmqtt_rx_buffer_t *state,
                 state->internal.ws_header.type != 0x2) {
             /* Handle special websocket frames */
             if(state->internal.ws_header.type == 8) {
-                /* TODO: connection close */
+                /* Connection closed by server */
                 return rx_buffer_fail(state,
-                    LMQTT_ERROR_WS_UNSUPPORTED_FRAME_TYPE, 0);
+                    LMQTT_ERROR_WS_CONNECTION_CLOSED_BY_SERVER, 0);
             } else if(state->internal.ws_header.type == 9) {
                 /* TODO: ping */
                 /* Ping may contain payload which must be repeated in pong */
