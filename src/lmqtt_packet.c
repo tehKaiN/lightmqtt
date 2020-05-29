@@ -462,6 +462,8 @@ LMQTT_STATIC lmqtt_decode_result_t websocket_header_decode(
 
             if(ws_header->internal.bytes_read == ws_header->internal.expected_size - 1)
                 result = LMQTT_DECODE_FINISHED;
+            else
+                result = LMQTT_DECODE_CONTINUE;
         }
     }
 
