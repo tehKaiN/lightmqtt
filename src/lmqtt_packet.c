@@ -78,7 +78,8 @@ LMQTT_STATIC lmqtt_encode_result_t encode_ws_header(lmqtt_encode_buffer_t *encod
     unsigned char *buf, size_t buf_len, size_t payload_len, size_t *bytes_written)
 {
     /* Get tx buffer from encode buffer */
-	lmqtt_tx_buffer_t *tx_buffer = (lmqtt_tx_buffer_t *)(
+    *bytes_written = 0;
+    lmqtt_tx_buffer_t *tx_buffer = (lmqtt_tx_buffer_t *)(
         (unsigned char*)encode_buffer -
         offsetof(lmqtt_tx_buffer_t, internal.buffer));
     if(!tx_buffer->ws_enabled) {
@@ -86,7 +87,6 @@ LMQTT_STATIC lmqtt_encode_result_t encode_ws_header(lmqtt_encode_buffer_t *encod
     }
 
     if(buf_len < 10) {
-        *bytes_written = 0;
         return LMQTT_ENCODE_CONTINUE;
     }
 
