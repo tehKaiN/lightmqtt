@@ -2,6 +2,7 @@
 #include <lightmqtt/types.h>
 #include <string.h>
 #include <assert.h>
+#include <ctype.h>
 
 #define LMQTT_CONNACK_RETURN_CODE_MAX 5
 #define LMQTT_ERROR_CONNACK_BASE \
@@ -614,11 +615,15 @@ LMQTT_STATIC lmqtt_encode_result_t connect_encode_ws_hanshake_origin(
      lmqtt_store_value_t *value, lmqtt_encode_buffer_t *encode_buffer,
     size_t offset, unsigned char *buf, size_t buf_len, size_t *bytes_written)
 {
-    static const char origin[] = "Origin: http://";
+    static const char origin_http[] = "Origin: http://";
+    static const char origin_https[] = "Origin: https://";
     static const char crlf[] = "\r\n";
     lmqtt_connect_t *connect = (lmqtt_connect_t *)value->value;
-    assert(buf_len >= strlen(origin) + connect->websocket_addr.len + strlen(crlf));
-    strcpy((char*)buf, origin);
+    assert(buf_len >= strlen(origin_https) + connect->websocket_addr.len + strlen(crlf));
+    if(connect->https)
+        strcpy((char*)buf, origin_https);
+    else
+        strcpy((char*)buf, origin_http);
     strcat((char*)buf, connect->websocket_addr.buf);
     strcat((char*)buf, crlf);
     *bytes_written = strlen((char*)buf);
@@ -1943,8 +1948,8 @@ LMQTT_STATIC lmqtt_decode_result_t rx_buffer_decode_remaining_without_id(
        or the minimum length check in `lmqtt_rx_buffer_decode` */
     assert((res != LMQTT_DECODE_FINISHED && rem_pos < rem_len) ||
         (res == LMQTT_DECODE_FINISHED && rem_pos == rem_len));
-    (void)(rem_len); // Fixes "unused variable" in release builds
-    (void)(rem_pos); // Ditto
+    (void)(rem_len); /* Fixes "unused variable" in release builds */
+    (void)(rem_pos); /* Ditto */
 
     return res;
 }
@@ -1966,6 +1971,29 @@ LMQTT_STATIC lmqtt_decode_result_t rx_buffer_decode_remaining_with_id(
         return LMQTT_DECODE_ERROR;
 
     return LMQTT_DECODE_CONTINUE;
+}
+
+/**
+ * @brief Compare strings in case-insensitive manner.
+ *
+ * @param ref Reference string. Must be lowercase!
+ * @param str String to check.
+ * @return 1 if strings are equal, 0 if not equal.
+ */
+LMQTT_STATIC int lmqtt_str_eq_ci(const char *ref, const char *str)
+{
+    while(*ref != '\0') {
+        /* Check if str is shorter */
+        if(*str == '\0')
+            return 0;
+
+        /* Check if str has same case-insensitive char as ref */
+        if(*ref != tolower(*str))
+            return 0;
+        ++ref;
+        ++str;
+    }
+    return 1;
 }
 
 static const struct _lmqtt_rx_buffer_decoder_t rx_buffer_decoder_connack = {
@@ -2115,8 +2143,9 @@ static lmqtt_io_result_t lmqtt_rx_buffer_decode_impl(lmqtt_rx_buffer_t *state,
                 state->ws_handshake_buffer[state->internal.ws_handshake_pos] = '\0';
 
                 /* Compare with significant response lines */
-                static const char *key_response_start = "Sec-WebSocket-Accept: ";
-                if(!strcmp("HTTP/1.1 101 Switching Protocols\r\n", state->ws_handshake_buffer)) {
+                static const char *key_response_start = "sec-websocket-accept: ";
+                if(lmqtt_str_eq_ci("http/1.1 101 switching protocols\r\n",
+                        state->ws_handshake_buffer)) {
                     state->internal.ws_handshake_was_http_ok = 1;
                 } else if(!strcmp("\r\n", state->ws_handshake_buffer)) {
                     if(!state->internal.ws_handshake_was_http_ok ||
@@ -2129,8 +2158,8 @@ static lmqtt_io_result_t lmqtt_rx_buffer_decode_impl(lmqtt_rx_buffer_t *state,
                         state->internal.value.callback_data,
                         state->internal.value.value
                     );
-                } else if(!memcmp(key_response_start, state->ws_handshake_buffer,
-                        strlen(key_response_start))) {
+                } else if (lmqtt_str_eq_ci(key_response_start,
+                        state->ws_handshake_buffer)) {
                     lmqtt_store_pop_marked_by(state->store,
                         LMQTT_KIND_WS_CONNECT, 0, &state->internal.value);
                     lmqtt_connect_t *connect = state->internal.value.value;
